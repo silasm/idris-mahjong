@@ -13,12 +13,12 @@ module Wall
   -- of the dead wall, and one tile is taken from the front of the live wall to
   -- become the active tile for the player who called the Kan.
   --
-  -- The Fin 4 keeps track of how many tiles have been drawn from the dead wall
-  -- by a Kan. If a 5th Kan is called, the hand ends with no win. Furthermore,
-  -- the Fin 4 is used in determinining the number and locations of the dora
-  -- indicators.
-  data DeadWall : Fin 4 -> Type where
-    MkDeadWall : Vect 14 Tile -> (fn : Fin 4) -> DeadWall fn
+  -- The first/last 4 tiles in the deadwall at the beginning of the game are
+  -- special in that they can be drawn from in the event of a Kan, so we
+  -- maintain that as a separate vector with the invariant that the two vectors
+  -- have a combined length of 14
+  data DeadWall : Nat -> Type where
+    MkDeadWall : Vect n Tile -> Vect m Tile -> (n + m = the Nat 14, LTE m 4) -> DeadWall m
 
   -- Pops a tile off the live wall, tile will become the active tile for the
   -- player drawing it.
@@ -29,21 +29,38 @@ module Wall
     putM (MkWall xs)
     pure x
 
+  -- shamelessly copied from the idris2048 implementation
+  -- https://github.com/KesterTong/idris2048
+  total
+  lteSuccR : LTE a b -> LTE a (S b)
+  lteSuccR lteZero = lteZero
+  lteSuccR (lteSucc x) = lteSucc (lteSuccR x)
+
+  -- This is used below to prove that the length of the deadwall draw tiles
+  -- stays below 4 when it decreases from a value already below 4.
+  --
+  -- not exactly sure how idris was able to reduce LTE (S a) b -> LTE a b
+  -- to LTE a (S b), but that made things easy since I already know how
+  -- lteSuccR is defined from idris2048. Neat!
+  total
+  lteSuccL : LTE (S a) b -> LTE a b
+  lteSuccL (lteSucc x) = lteSuccR x
+
   -- Pops a tile off the dead wall and adds the /last/ tile in the live wall
   -- to the /end/ of the dead wall. Only happens after a Kan is called. The
   -- resulting tile will become the active tile for the player who called the
   -- Kan.
   deadWallDraw : { ['wall ::: STATE (Wall (S n)),
-                 'deadWall ::: STATE (DeadWall (weaken fn))] ==>
+                 'deadWall ::: STATE (DeadWall (S a))] ==>
                  ['wall ::: STATE (Wall n),
-                 'deadWall ::: STATE (DeadWall (fS fn))] } Eff m Tile
+                 'deadWall ::: STATE (DeadWall a)] } Eff m Tile
   deadWallDraw = do
     (MkWall xs) <- 'wall :- get
     let xs' = init xs
     let x'  = last xs
-    (MkDeadWall (y :: ys) (fS n)) <- 'deadWall :- get
-    'deadWall :- put (MkDeadWall (ys ++ [x']) (?rhs2))
+    (MkDeadWall ys (z :: zs) (len14,lt4)) <- 'deadWall :- get
+    'deadWall :- putM (MkDeadWall (ys ++ [x']) zs (?length14,lteSuccL lt4))
     'wall :- putM (MkWall xs')
-    pure y
+    pure z
 
-  doraIndicators : Bool -> DeadWall fn -> List Tile
+  doraIndicators : Bool -> DeadWall n -> List Tile

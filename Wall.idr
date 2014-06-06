@@ -43,8 +43,12 @@ module Wall
   -- to LTE a (S b), but that made things easy since I already know how
   -- lteSuccR is defined from idris2048. Neat!
   total
-  lteSuccL : LTE (S a) b -> LTE a b
-  lteSuccL (lteSucc x) = lteSuccR x
+  lteUnsuccL : LTE (S a) b -> LTE a b
+  lteUnsuccL (lteSucc x) = lteSuccR x
+  -- actually this makes sense when you replace lteSuccR with its value:
+  -- lteUnsuccL : LTE (S a) b -> LTE a b
+  -- lteUnsuccL (lteSucc lteZero) = lteZero -- (a < b because a is zero)
+  -- lteUnsuccL (lteSucc x) = lteSucc (lteUnsuccL x)
 
   -- Pops a tile off the dead wall and adds the /last/ tile in the live wall
   -- to the /end/ of the dead wall. Only happens after a Kan is called. The
@@ -59,8 +63,30 @@ module Wall
     let xs' = init xs
     let x'  = last xs
     (MkDeadWall ys (z :: zs) (len14,lt4)) <- 'deadWall :- get
-    'deadWall :- putM (MkDeadWall (ys ++ [x']) zs (?length14,lteSuccL lt4))
+    'deadWall :- putM (MkDeadWall (ys ++ [x']) zs (?length14,lteUnsuccL lt4))
     'wall :- putM (MkWall xs')
     pure z
 
-  doraIndicators : Bool -> DeadWall n -> List Tile
+  -- the number of dora indicators is one plus the number of kans called; the
+  -- number of kans called is the number of tiles drawn from the dead wall; the
+  -- dead wall starts out with 4 drawable tiles. Thus the number of dora
+  -- indicators is 1 + 4 - n = 5 - n, where n represents the number of drawable
+  -- tiles left in the deadwall
+  doraIndicators : DeadWall n -> Vect (5 - n) Tile
+  -- implementing it this way makes idris take a really, really long time and a
+  -- tremendous amount of resources to typecheck. It's pretty silly, actually.
+  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_::x7::_::x9::_) [] _) = [x1,x3,x5,x7,x9]
+  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_::x7::_) [_] _) = [x1,x3,x5,x7]
+  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_) [_,_] _) = [x1,x3,x5]
+  -- doraIndicators (MkDeadWall (x1::_::x3::_) [_,_,_] _) = [x1,x3]
+  -- doraIndicators (MkDeadWall (x1::_) [_,_,_,_] _) = [x1]
+
+---------- Proofs ----------
+
+Wall.length14 = proof
+  intros
+  compute -- plus (n + 1) a = 14  ==> plus (plus n 1) a = 14
+  rewrite plusCommutative 1 n1 -- ==> plus (S n) a = 14
+  compute                      -- ==> S (plus n a) = 14
+  rewrite sym (plusSuccRightSucc n1 a) -- ==> plus n (S a) 14
+  refine len14

@@ -1,59 +1,59 @@
 module UVect
 
+-- declaring totality causes an error with `noEmptyElem` and
+-- `neitherHereNorThere` where they pattern match on Here. To make matters more
+-- confusing, this isn't caught by --total --warnpartial, but /is/ caught by
+-- %default total or requiring the individual functions be total
+
+-- %default total
+
+-- implementation of unique vectors; i.e. vectors such that each element
+-- in the vector is unique up to propositional equality.
+
 mutual
+  -- Constructions are augmented with proof that x is not already in xs
   data UVect : Nat -> Type -> Type where
-    UNil  : {a : Type} -> UVect Z a
-    UCons : {a : Type} -> (xin : a) -> (xsin : UVect n a) ->
-            NotElem xin xsin -> UVect (S n) a
+    Nil  : UVect Z a
+    (::) : (x : a) -> (xs : UVect n a) -> Not (Elem x xs) -> UVect (S n) a
 
-  data NotElem : a -> UVect n a -> Type where
-    NotInEmpty : {x : a} -> NotElem x UNil
-    NotInUCons : {x,y : a} -> {xs : UVect n a} -> {auto p : NotElem y xs} ->
-                 NotElem x xs -> (x = y -> _|_) -> NotElem x (UCons y xs p)
-
+  -- requires an additional implicit showing that the `y :: xs' proof
+  -- was valid to begin with
+  data Elem : a -> UVect n a -> Type where
+    Here  : {x : a} -> {xs : UVect n a} -> {p : Not (Elem x xs)} ->
+            Elem x ((x :: xs) p)
+    There : {x,y : a} -> {xs : UVect n a} -> {p : Not (Elem y xs)} ->
+            Elem x xs -> Elem x ((y :: xs) p)
 -- end mutual
-data Elem  : a -> UVect n a -> Type where
-  Here  : {x : a} -> {xs : UVect n a} -> {p : NotElem x xs} ->
-          Elem x (UCons x xs p)
-  There : {x,y : a} -> {xs : UVect n a} -> {p : NotElem y xs} ->
-          Elem x xs -> Elem x (UCons y xs p)
 
-elemImpliesNotNotElem : {a : Type} -> {x : a} -> {n : Nat} -> {xs : UVect n a} ->
-                        Elem x xs -> Not (NotElem x xs)
-elemImpliesNotNotElem Here = 
+-- Copied from upstream Data.Vect
+-- Nothing can be in an empty UVect
+noEmptyElem : {x : a} -> UVect.Elem x [] -> _|_
+noEmptyElem Here impossible
+noEmptyElem (There _) impossible
 
--- Homogeneous equality
-Eq : a -> a -> Type
-Eq x y = x = y
+-- Copied from upstream Data.Vect
+-- An item not in the head and not in the tail is not in the UVect at all
+neitherHereNorThere : {x, y : a} -> {xs : UVect n a} ->
+                      {auto p : Not (Elem y xs)} -> Not (x = y) ->
+                      Not (Elem x xs) -> Not (Elem x ((y :: xs) p))
+neitherHereNorThere xneqy xninxs Here = xneqy refl
+neitherHereNorThere xneqy xninxs (There xinxs) = xninxs xinxs
 
+-- Whether or not x is an element of UVect xs is decidable if equality of x is
+-- decidable
+decElem : (DecEq a) => (x : a) -> (xs : UVect n a) -> Dec (Elem x xs)
+decElem x [] = No noEmptyElem
+decElem x ((y :: xs) p) with (decEq x y)
+  decElem x ((x :: xs) p) | (Yes refl) = Yes Here
+  decElem x ((y :: xs) p) | (No   neq) with (decElem x xs)
+    | (No nel)  = No (neitherHereNorThere neq nel)
+    | (Yes el) = Yes (There el)
+
+
+-- Constructs x onto xs iff xs does not already contain x
 using (a : Type, n : Nat)
-  notElem   : (DecEq a) => (x : a) -> (xs : UVect n a) -> Dec (NotElem x xs)
-  notElem x UNil = Yes NotInEmpty
-  notElem x (UCons y ys _) with (decEq x y)
-    notElem x (UCons x ys _) | (Yes refl) = No ?rhs
-    notElem x (UCons y ys p) | (No  neq) with (notElem x ys)
-      | (Yes q) = NotInUCons q neq
-      | (No cont) = cont
-{--
-  maybeGrow : (DecEq a)  =>
-              (x : a) -> (xs : UVect n a) -> { p : Dec (NotElem x xs) } ->
-              Maybe (l ** l `Eq` UCons {n=n} {a=a} x xs _)
-  maybeGrow x UNil {p=p} = Just (UCons x UNil p ** refl)
-  maybeGrow x (UCons y xs q) {p=p} with (decEq x y)
-    maybeGrow x (UCons x xs q) | (Yes refl) impossible
-    maybeGrow x (UCons y xs q) | (No  cont) = Just 
-
-total
-uvectInjective1 : {a : Type} -> {x, y : a} -> {xs, ys : UVect n a} ->
-                  UCons x xs p = UCons y ys q -> x = y
-uvectInjective1 {x=x} {y=x} {xs=xs} {ys=xs} refl = refl
-
-instance DecEq a => DecEq (UVect n a) where
-  decEq UNil UNil = Yes refl
-  decEq (UCons x xs p) (UCons y ys q) with (decEq x y, decEq xs ys)
-    decEq (UCons x xs p) (UCons x ys q)   | Yes refl with (decEq xs ys)
-      decEq (UCons x xs p) (UCons x xs q) | Yes refl | Yes refl = Yes refl
-      decEq (UCons x xs p) (UCons x ys q) | Yes refl | No  neq  = No (neq . uvectInjective2)
-    decEq (UCons x xs p) (UCons y ys q)   | No  neq             = No (neq . uvectInjective1)
-    | (_) = No ?prfNo
---}
+  maybeGrow : (DecEq a) => (x : a) -> (xs : UVect n a) ->
+              Either (UVect n a) (UVect (S n) a)
+  maybeGrow x xs with (decElem x xs)
+    | (No nel) = Right ((x :: xs) nel)
+    | (Yes el) = Left  xs

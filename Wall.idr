@@ -67,19 +67,37 @@ module Wall
     'wall :- putM (MkWall xs')
     pure z
 
+  odds : Vect n a -> (m ** (Vect m a, Either (m = divNat n 2) (m = divNat n 2 + 1)))
+  odds []         = Ex_intro _ ([], Left refl)
+  odds (x::[])    = Ex_intro _ ([x], Right refl)
+  odds (x::y::xs) = case odds xs of
+                         (_ ** (ys,Left l)) => Ex_intro _ (x::ys,?lprf)
+                         (_ ** (ys,Right r)) => Ex_intro _ (x::ys,?rprf)
+
+  natToFinSafe : (n : Nat) -> (m : Nat) -> LTE n (S m) -> Fin (S m)
+  natToFinSafe Z Z lteZero = fZ
+  natToFinSafe Z (S k) lteZero = fZ
+  natToFinSafe (S k) Z (lteSucc x) = fZ
+  natToFinSafe (S k) (S j) (lteSucc x) = fS $ natToFinSafe k j x
+
+  inv_natToFinSafe_finToNat : {m : Nat} -> {n : Nat} ->
+                              (prf : LTE n (S m)) -> (fn : Fin (S m)) -> (n = finToNat fn) ->
+                              (natToFinSafe n m prf = fn)
+  inv_natToFinSafe_finToNat prf1 fn prf2 = ?rhs
+
+  fromJust : {a : Type} -> {y : a} -> (x : Maybe a) -> (x = Just y) -> a
+  fromJust (Just y) refl = y
+  fromJust x prf = ?fromJust_rhs
+
   -- the number of dora indicators is one plus the number of kans called; the
   -- number of kans called is the number of tiles drawn from the dead wall; the
   -- dead wall starts out with 4 drawable tiles. Thus the number of dora
   -- indicators is 1 + 4 - n = 5 - n, where n represents the number of drawable
   -- tiles left in the deadwall
-  doraIndicators : DeadWall n -> Vect (5 - n) Tile
-  -- implementing it this way makes idris take a really, really long time and a
-  -- tremendous amount of resources to typecheck. It's pretty silly, actually.
-  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_::x7::_::x9::_) [] _) = [x1,x3,x5,x7,x9]
-  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_::x7::_) [_] _) = [x1,x3,x5,x7]
-  -- doraIndicators (MkDeadWall (x1::_::x3::_::x5::_) [_,_] _) = [x1,x3,x5]
-  -- doraIndicators (MkDeadWall (x1::_::x3::_) [_,_,_] _) = [x1,x3]
-  -- doraIndicators (MkDeadWall (x1::_) [_,_,_,_] _) = [x1]
+  doraIndicators : DeadWall n -> (m ** (Vect m Tile, m = 5 - n))
+  doraIndicators (MkDeadWall xs _ _) {n=n} = let (m ** (ys,_)) = odds xs in
+                                             let minus5nFin = natToFinSafe (5 - n) m ?ltm in
+                                             (_ ** (take minus5nFin ys, ?minus5n))
 
 ---------- Proofs ----------
 

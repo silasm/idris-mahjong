@@ -16,7 +16,9 @@ module Tile
     Bamboo    : Suit
     Wheel     : Suit
 
+  -- Tiles are indexed so that a single tile cannot be reused for scoring,
+  -- and to differentiate akadoras in the case of 5s
   data Tile : Type where
-    Wind   : Direction -> Tile
-    Dragon : Color -> Tile
-    Suited : Suit -> Fin 9 -> Tile
+    Wind   : Direction -> Fin 4 -> Tile
+    Dragon : Color -> Fin 4 -> Tile
+    Suited : Suit -> Fin 9 -> Fin 4 -> Tile
